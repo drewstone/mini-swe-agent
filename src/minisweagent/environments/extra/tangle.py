@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from pydantic import BaseModel
-from tangle_sandbox import ExecOptions, Sandbox, SandboxResources
+from tangle_sandbox import ExecOptions, Sandbox, SandboxResources, SandboxStatus
 
 from minisweagent.exceptions import Submitted
 from minisweagent.utils.serialize import recursive_merge
@@ -14,7 +14,7 @@ from minisweagent.utils.serialize import recursive_merge
 
 class TangleEnvironmentConfig(BaseModel):
     image: str | None = None
-    """Container image to run in. `None` uses Tangle's default environment (Ubuntu with Python, Node.js and git)."""
+    """Container image to run in. `None` uses Tangle's default environment."""
     cwd: str = "/home/agent"
     """Working directory in which to execute commands. The image's root filesystem is read-only;
     `/home/agent` and `/tmp` are writable."""
@@ -36,9 +36,9 @@ class TangleEnvironmentConfig(BaseModel):
     disk_gb: int | None = None
     """Disk for the sandbox in GB. Tangle's default when unset."""
     max_lifetime_seconds: int = 7200
-    """Tangle deletes the sandbox after this many seconds, even if `cleanup` never runs."""
+    """Tangle suspends the sandbox after this many seconds if `cleanup` never ran; only `cleanup` deletes it."""
     base_url: str = os.getenv("TANGLE_BASE_URL", "https://sandbox.tangle.tools")
-    """Tangle Sandbox API URL. The API key is read from `TANGLE_API_KEY`."""
+    """Tangle Sandbox API URL, from `TANGLE_BASE_URL` when set. The API key is read from `TANGLE_API_KEY`."""
 
 
 class TangleEnvironment:
@@ -65,7 +65,7 @@ class TangleEnvironment:
             max_lifetime_seconds=self.config.max_lifetime_seconds,
             metadata={"created_by": "mini-swe-agent"},
         )
-        self.sandbox.wait_for("running")
+        self.sandbox.wait_for(SandboxStatus.RUNNING)
         self.logger.info(f"Started Tangle sandbox {self.sandbox.id}")
 
     def get_template_vars(self, **kwargs) -> dict[str, Any]:
@@ -87,13 +87,10 @@ class TangleEnvironment:
         env = {k: v for k in self.config.forward_env if (v := os.getenv(k)) is not None}
         env.update(self.config.env)
         try:
+            # `cd` here rather than `ExecOptions.cwd`, which runs in the default directory when `cwd` does not exist.
             result = self.sandbox.exec(
-                shlex.join([*self.config.interpreter, command]),
-                ExecOptions(
-                    cwd=cwd or self.config.cwd,
-                    env=env or None,
-                    timeout_ms=(timeout or self.config.timeout) * 1000,
-                ),
+                f"cd {shlex.quote(cwd or self.config.cwd)} && {shlex.join([*self.config.interpreter, command])}",
+                ExecOptions(env=env or None, timeout_ms=(timeout or self.config.timeout) * 1000),
             )
             output = {"output": result.stdout + result.stderr, "returncode": result.exit_code, "exception_info": ""}
         except Exception as e:
@@ -120,10 +117,15 @@ class TangleEnvironment:
             )
 
     def cleanup(self):
-        """Delete the sandbox."""
+        """Delete the sandbox and close the API client."""
         sandbox, self.sandbox = getattr(self, "sandbox", None), None
-        if sandbox is not None:
-            sandbox.delete()
+        client, self.client = getattr(self, "client", None), None
+        try:
+            if sandbox is not None:
+                sandbox.delete()
+        finally:
+            if client is not None:
+                client.close()
 
     def __del__(self):
         self.cleanup()

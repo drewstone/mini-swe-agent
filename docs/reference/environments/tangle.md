@@ -27,6 +27,8 @@ Each environment creates one sandbox and deletes it on cleanup.
    ```bash
    export TANGLE_API_KEY="your-tangle-api-key"
    ```
+   or store it with `mini-extra config set TANGLE_API_KEY your-tangle-api-key`.
+   Set `TANGLE_BASE_URL` to use another Tangle Sandbox API endpoint.
 
 ## Usage
 
@@ -41,5 +43,6 @@ mini -c mini.yaml -c environment.environment_class=tangle -c environment.image=p
 ```
 
 The image's root filesystem is read-only. Commands run in `/home/agent` by default, and `/home/agent` and `/tmp` are writable.
+SWE-bench is not supported yet, because its images edit `/testbed` in place.
 
 {% include-markdown "../../_footer.md" %}

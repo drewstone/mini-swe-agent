@@ -29,6 +29,7 @@ def test_tangle_execute(env, monkeypatch):
     assert env.execute({"command": "exit 3"})["returncode"] == 3
     assert env.execute({"command": "pwd"})["output"].strip() == "/home/agent"
     assert env.execute({"command": "pwd"}, cwd="/tmp")["output"].strip() == "/tmp"
+    assert env.execute({"command": "pwd"}, cwd="/nonexistent")["returncode"] != 0
     monkeypatch.setenv("TANGLE_TEST_FORWARDED", "from-host")
     assert env.execute({"command": "echo $MY_VAR $TANGLE_TEST_FORWARDED"})["output"].strip() == "from-config from-host"
 
@@ -54,13 +55,18 @@ def test_tangle_submitted(env):
 
 
 def test_tangle_image_and_cleanup():
-    """A sandbox starts from the given image and is deleted on cleanup."""
+    """A sandbox starts from the given image, keeps its root read-only, and is deleted on cleanup."""
+    from tangle_sandbox import Sandbox
+
     from minisweagent.environments.extra.tangle import TangleEnvironment
 
     env = TangleEnvironment(image="python:3.11-slim")
     sandbox_id = env.sandbox.id
     assert env.execute({"command": "python --version"})["output"].startswith("Python 3.11")
+    assert env.execute({"command": "pwd"})["output"].strip() == "/home/agent"
+    assert env.execute({"command": "touch /tmp/x && touch /home/agent/x && ! touch /usr/x"})["returncode"] == 0
     assert env.serialize()["info"]["config"]["environment"]["image"] == "python:3.11-slim"
     env.cleanup()
     assert env.sandbox is None
-    assert env.client.get(sandbox_id).status.value == "deleted"
+    with Sandbox(api_key=os.environ["TANGLE_API_KEY"], base_url=env.config.base_url) as client:
+        assert client.get(sandbox_id).status.value == "deleted"
