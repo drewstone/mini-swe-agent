@@ -57,11 +57,11 @@ class TangleEnvironment:
         self.config = config_class(**kwargs)
         self.sandbox = None
         self.client = Sandbox(api_key=os.environ["TANGLE_API_KEY"], base_url=self.config.base_url)
-        resources = {"cpu_cores": self.config.cpu_cores, "memory_mb": self.config.memory_mb, "disk_gb": self.config.disk_gb}
+        resources = SandboxResources(self.config.cpu_cores, self.config.memory_mb, self.config.disk_gb)
         self.sandbox = self.client.create(
             name=f"minisweagent-{uuid.uuid4().hex[:8]}",
             environment=self.config.image,
-            resources=SandboxResources(**resources) if any(v is not None for v in resources.values()) else None,
+            resources=resources if resources != SandboxResources() else None,
             max_lifetime_seconds=self.config.max_lifetime_seconds,
             metadata={"created_by": "mini-swe-agent"},
         )
