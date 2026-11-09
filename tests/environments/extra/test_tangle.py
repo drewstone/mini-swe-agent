@@ -63,4 +63,4 @@ def test_tangle_image_and_cleanup():
     assert env.serialize()["info"]["config"]["environment"]["image"] == "python:3.11-slim"
     env.cleanup()
     assert env.sandbox is None
-    assert env.client.get(sandbox_id) is None
+    assert env.client.get(sandbox_id).status.value == "deleted"
