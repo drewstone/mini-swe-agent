@@ -30,3 +30,5 @@ On top, there are a few more specialized environment classes that you can use:
 
 * **`contree`** ([`ContreeEnvironment`](../reference/environments/contree.md)) - Uses [ConTree](https://contree.dev/) for safe code execution sandboxing. Platform that built for agents and supports Git-like execution.
 
+* **`tangle`** ([`TangleEnvironment`](../reference/environments/tangle.md)) - Runs commands in [Tangle](https://tangle.tools) cloud sandboxes.
+
